@@ -63,8 +63,7 @@ on init
     mkdir /persist 0771 system system
 
 on fs
-    exec /sbin/dualboot_init ./fstab.qcom
-    mount_all ./fstab.qcom.patched
+    mount_all ./fstab.qcom
     mkdir /persist/property
     chmod 0775 /persist/property
 
