@@ -37,17 +37,25 @@ on early-init
 
 on init
     mkdir /storage 0775 system system
-    mkdir /mnt/media_rw/sdcard0 0700 media_rw media_rw
+    mkdir /mnt/shell/emulated 0700 shell shell
+    mkdir /storage/emulated 0555 root root
+    mkdir /mnt/media_rw/sdcard1 0700 media_rw media_rw
+    mkdir /storage/sdcard1 0775 system system
     mkdir /mnt/media_rw/usbdisk 0700 media_rw media_rw
-    mkdir /storage/sdcard0 0775 system system
     mkdir /storage/usbdisk 0775 system system
-    mkdir /storage_int 0775 media_rw media_rw
-    chown media_rw media_rw /storage_int
-    export EXTERNAL_STORAGE /storage/sdcard0
 
-    symlink /storage/sdcard0 /sdcard
-    symlink /storage/sdcard0 /storage_int
-    symlink /storage/sdcard0 /mnt/sdcard
+    export EXTERNAL_STORAGE /storage/emulated/legacy
+    export EMULATED_STORAGE_SOURCE /mnt/shell/emulated
+    export EMULATED_STORAGE_TARGET /storage/emulated
+    export SECONDARY_STORAGE /storage/sdcard1
+    
+    # Support legacy paths
+    symlink /storage/emulated/legacy /sdcard
+    symlink /storage/emulated/legacy /mnt/sdcard
+    symlink /storage/emulated/legacy /storage/sdcard0
+    symlink /mnt/shell/emulated/0 /storage/emulated/legacy
+    symlink /storage/sdcard1 /external_sd
+    symlink /storage/sdcard1 /mnt/external_sd
     symlink /storage/usbdisk /usbdisk
     symlink /storage/usbdisk /mnt/usbdisk
     
@@ -346,10 +354,6 @@ on post-fs-data
     # Hardware tunables
     chown root system /sys/class/timed_output/vibrator/amp
     chmod 0664 /sys/class/timed_output/vibrator/amp
-    chown root system /sys/devices/platform/kcal_ctrl.0/kcal
-    chown root system /sys/devices/platform/kcal_ctrl.0/kcal_ctrl
-    chmod 0664 /sys/devices/platform/kcal_ctrl.0/kcal
-    chmod 0664 /sys/devices/platform/kcal_ctrl.0/kcal_ctrl
     chown root system /sys/devices/i2c-3/3-004b/disable_keys
     chmod 0664 /sys/devices/i2c-3/3-004b/disable_keys
     chown root system /sys/bus/i2c/drivers/atmel_mxt_ts/3-004b/dt2w_enabled
@@ -358,8 +362,6 @@ on post-fs-data
     chown root system /sys/bus/i2c/drivers/atmel_mxt_ts/3-004b/s2w_enabled
     chmod 0664 /sys/bus/i2c/drivers/atmel_mxt_ts/3-004b/s2w_enabled
     restorecon /sys/bus/i2c/drivers/atmel_mxt_ts/3-004b/s2w_enabled
-    restorecon /sys/devices/platform/kcal_ctrl.0/kcal
-    restorecon /sys/devices/platform/kcal_ctrl.0/kcal_ctrl
 
 on charger
     mount ext4 /dev/block/platform/msm_sdcc.1/by-name/system /system wait ro barrier=1
@@ -486,13 +488,22 @@ service sensors /system/bin/sensors.qcom
     group root
     disabled
 
-service fuse_sdcard0 /system/bin/sdcard -u 1023 -g 1023 /mnt/media_rw/sdcard0 /storage/sdcard0
+# virtual sdcard daemon running as media_rw (1023)
+service sdcard /system/bin/sdcard -u 1023 -g 1023 -l /data/media /mnt/shell/emulated
+    class late_start
+
+service fuse_sdcard1 /system/bin/sdcard -u 1023 -g 1023 -d /mnt/media_rw/sdcard1 /storage/sdcard1
     class late_start
     disabled
 
 service fuse_usbdisk /system/bin/sdcard -u 1023 -g 1023 /mnt/media_rw/usbdisk /storage/usbdisk
     class late_start
     disabled
+
+# Binding fuse mount point to /storage/emulated/legacy
+on property:init.svc.sdcard=running
+    wait /mnt/shell/emulated/0
+    mount none /mnt/shell/emulated/0 /storage/emulated/legacy bind
 
 service wpa_supplicant /system/bin/wpa_supplicant \
     -iwlan0 -Dnl80211 -c/data/misc/wifi/wpa_supplicant.conf \
